@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import locale
 from datetime import datetime
+import mibian
 
 locale.setlocale(locale.LC_ALL, 'esp_esp')
 
@@ -31,9 +32,21 @@ def get_data():
             df_option.columns = df_option.columns.get_level_values(0)
             list_option = df_option.iloc[:-2, [0, -1]].values[:].tolist()
 
-            df_option = pd.DataFrame([[ind[1:2], ind[2:3], datetime.strptime(ind[3:], '%Y%m%d'), opt[0], opt[1]] for ind, opt in zip(indexes, list_option)], columns=['call_put', 'type', 'date', 'strike', 'price'])
+            df_option = pd.DataFrame([[ind[1:2], ind[2:3], datetime.strptime(ind[3:], '%Y%m%d'), float(opt[0]), float(opt[1])] for ind, opt in zip(indexes, list_option) if opt[1] != '-'], columns=['call_put', 'type', 'date', 'strike', 'price'])
             df_option.index = df_option.iloc[:, 2].values
             df_option = df_option.iloc[:, [0, 1, 3, 4]]
             df_option = df_option[df_option.type == 'E']
 
             return df_future, df_option
+
+
+def implied_volatility(df_option, future_price):
+    """
+    Calculate implied volatility for a given future price, strike, expiry and price.
+    """
+    if df_option.call_put == 'C':
+        c = mibian.BS([future_price, df_option.strike, 0, (df_option.name-datetime.today()).days], callPrice=df_option.price)
+        return c.impliedVolatility
+    elif df_option.call_put == 'P':
+        p = mibian.BS([future_price, df_option.strike, 0, (df_option.name-datetime.today()).days], putPrice=df_option.price)
+        return p.impliedVolatility
