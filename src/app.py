@@ -45,9 +45,9 @@ app.layout = html.Div(
                             className="title",
                         ),
                         dcc.Markdown(
-                            """MIAX8 - Cloud Technologies""".replace(
-                                "  ", ""
-                            ),
+                            """MIAX8 - Cloud Technologies - [Antonio Bernal](https://www.linkedin.com/in/bernal-antonio/)""".replace(
+                                                            "  ", ""
+                                                        ),
                             className="subtitle",
                         ),
                     ]
