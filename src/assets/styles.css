@@ -41,6 +41,11 @@ h5 {
   width: 25%;
   background-color: #f3f6fa;
 }
+.date-dropdown-2 {
+  padding: 10px 35px;
+  /* width: 25%; */
+  background-color: #f3f6fa;
+}
 .rc-slider-handle {
   border: solid 2px #2a6fd3;
 }
