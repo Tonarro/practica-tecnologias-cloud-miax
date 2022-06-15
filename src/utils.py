@@ -4,6 +4,8 @@ import pandas as pd
 import locale
 from datetime import datetime
 import mibian
+import boto3
+from boto3.dynamodb.conditions import Key
 
 locale.setlocale(locale.LC_ALL, 'es_ES.UTF-8')
 
@@ -50,3 +52,25 @@ def implied_volatility(df_option, future_price):
     elif df_option.call_put == 'P':
         p = mibian.BS([future_price, df_option.strike, 0, (df_option.name-datetime.today()).days], putPrice=df_option.price)
         return p.impliedVolatility
+
+
+def scan_dynamodb(table_name):
+    dynamodb = boto3.resource('dynamodb', aws_access_key_id="AKIAY6FUYBZMK6AQQSER", aws_secret_access_key="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", region_name="eu-west-3",)
+    table = dynamodb.Table(table_name)
+    response = table.scan()
+    if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+        return response['Count'], response['Items']
+    else:
+        return 0, []
+
+
+def read_data_dynamodb(table_name, key_name, key_value):
+    dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.Table(table_name)
+    response = table.query(
+        KeyConditionExpression=Key(key_name).eq(key_value)
+    )
+    print(response['Items'])
+    df = pd.DataFrame(response['Items'])
+    return df
+

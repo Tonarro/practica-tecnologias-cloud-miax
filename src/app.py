@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # Import required libraries
+from distutils.log import debug
 import pandas as pd
 import numpy as np
 import dash
@@ -7,7 +8,8 @@ import pathlib
 from dash.dependencies import Input, Output, State
 from dash import dcc, html, callback_context
 import plotly.graph_objs as go
-from utils import get_data, implied_volatility
+from utils import scan_dynamodb
+from datetime import datetime
 
 
 # Setup the app
@@ -20,14 +22,15 @@ server = app.server
 # get relative data folder
 PATH = pathlib.Path(__file__).parent
 
-df_future, df_option = get_data()
+count, items = scan_dynamodb('MINI_IBEX_VOL')
 
-first_date = str(df_option.sort_index().index[0])[:10]
+all_options = {}
 
-df_option['implied_volatility'] = df_option.apply(lambda row: implied_volatility(df_option=row, future_price=df_future.iloc[0]), axis=1)
+for i in items:
+    all_options[i['DATE']] = pd.Series(list(set([dat['expiration_date']for dat in i['DATA']]))).sort_values().values.tolist()
 
-timestamp_list = df_option.index.unique().to_list()
-timestamp_list = [str(i)[:10] for i in timestamp_list]
+first_date = list(all_options.keys())[-1]
+
 
 app.layout = html.Div(
     [
@@ -64,6 +67,19 @@ app.layout = html.Div(
                 ),
                 html.Div(
                     [
+                    html.Label(['Date']),
+                    dcc.Dropdown(
+                        options=[{'label': k, 'value': k} for k in all_options.keys()],
+                        value=first_date,
+                        clearable=False,
+                        id='date-dropdown'
+                        ),
+                    html.Div(id='date-output-container')
+                    ],
+                    className="date-dropdown",
+                ),
+                html.Div(
+                    [
                         html.Button(
                             "CALL",
                             id="call",
@@ -82,8 +98,11 @@ app.layout = html.Div(
                 ),
                 html.Div(
                     [
-                    dcc.Dropdown(timestamp_list, value=first_date, clearable=False, id='date-dropdown'),
-                    html.Div(id='date-output-container')
+                    html.Label(['Expiration Date']),
+                    dcc.Dropdown(clearable=False,
+                    id='exp-date-dropdown'
+                    ),
+                    html.Div(id='exp_date-output-container')
                     ],
                     className="date-dropdown",
                 ),
@@ -93,7 +112,9 @@ app.layout = html.Div(
         html.Div(
             [
                 html.Div([dcc.Markdown(id="text")], className="text-box"),
-                dcc.Graph(id="graph", style={"margin": "0px 20px", "height": "45vh"}),
+                dcc.Graph(id="graph",
+                style={"margin": "0px 20px", "height": "45vh"}
+                ),
             ],
             id="page",
             className="eight columns",
@@ -102,6 +123,20 @@ app.layout = html.Div(
     className="row flex-display",
     style={"height": "100vh"},
 )
+
+
+@app.callback(
+    Output('exp-date-dropdown', 'options'),
+    Input('date-dropdown', 'value'))
+def set_exp_date_options(selected_index):
+    return [{'label': i, 'value': i} for i in all_options[selected_index]]
+
+
+@app.callback(
+    Output('exp-date-dropdown', 'value'),
+    Input('exp-date-dropdown', 'options'))
+def set_exp_date_value(available_options):
+    return available_options[0]['value']
 
 
 @app.callback(
@@ -128,18 +163,28 @@ def get_last_button(btn_call, btn_put):
 # Make graph
 @app.callback(
     Output("graph", "figure"),
-    Input("date-dropdown", "value"),
+    Input("exp-date-dropdown", "value"),
+    State("date-dropdown", "value"),
     Input("intermediate-value", "data")
 )
-def make_graph(date, data):
+def make_graph(exp_date, date, data):
     call_put = data['call_put']
     call_put_label = data['call_put_label']
+
+    df_option = [i['DATA'] for i in items if i['DATE'] == date][0]
+    df_option = pd.DataFrame(df_option)
+
+    df_option.implied_volatility = df_option.implied_volatility.apply(lambda x: float(x))
+    df_option.strike = df_option.strike.apply(lambda x: float(x))
+    df_option.price = df_option.price.apply(lambda x: float(x))
+    df_option.expiration_date = df_option.expiration_date.apply(lambda x: datetime.strptime(x, '%Y-%m-%d'))
+    df_option.index = df_option.expiration_date.values
     
-    strikes = df_option[df_option.call_put == call_put][date:date].loc[:, 'strike'].values
-    imp_probs = df_option[df_option.call_put == call_put][date:date].loc[:, 'implied_volatility'].values
+    strikes = df_option[df_option.call_put == call_put][exp_date:exp_date].loc[:, 'strike'].values
+    imp_probs = df_option[df_option.call_put == call_put][exp_date:exp_date].loc[:, 'implied_volatility'].values
 
     layout = go.Layout(
-        title=f"Volatility Skew {date} ({call_put_label})",
+        title=f"Volatility Skew {exp_date} ({call_put_label}) - {date}",
         plot_bgcolor="#FFF",  # Sets background color to white
         xaxis=dict(
             title="Strike",

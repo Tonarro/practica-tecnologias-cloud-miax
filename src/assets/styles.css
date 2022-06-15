@@ -37,7 +37,8 @@ h5 {
   padding: 0px 15px;
 }
 .date-dropdown {
-  padding: 10px 38px;
+  padding: 10px 35px;
+  width: 25%;
   background-color: #f3f6fa;
 }
 .rc-slider-handle {
