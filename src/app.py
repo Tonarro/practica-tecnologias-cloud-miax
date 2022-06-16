@@ -8,8 +8,9 @@ import pathlib
 from dash.dependencies import Input, Output, State
 from dash import dcc, html, callback_context
 import plotly.graph_objs as go
-from utils import scan_dynamodb
+from utils import scan_dynamodb, unixTimeMillis, unixToDatetime
 from datetime import datetime
+from scipy.interpolate import griddata
 
 
 # Setup the app
@@ -32,6 +33,13 @@ for i in items:
     all_options[i['DATE']] = pd.Series(list(set([dat['expiration_date']for dat in i['DATA']]))).sort_values().values.tolist()
 
 first_date = list(all_options.keys())[-1]
+
+MAX_DATES_MULTI_DROPDOWN = 4
+
+MAX_ROWS_SLIDER = 5
+
+slider_marks = {unixTimeMillis(i): i for i in list(all_options.keys())[:MAX_ROWS_SLIDER]}
+slider_marks
 
 
 app.layout = html.Div(
@@ -123,7 +131,7 @@ app.layout = html.Div(
                                 html.Label(['Date']),
                                 dcc.Dropdown(
                                     options=[{'label': k, 'value': k} for k in all_options.keys()],
-                                    value=first_date,
+                                    value=list(all_options.keys())[-MAX_DATES_MULTI_DROPDOWN:],
                                     multi=True,
                                     clearable=False,
                                     id='date-dropdown-2'
@@ -164,7 +172,35 @@ app.layout = html.Div(
 
         ]),
         dcc.Tab(label='Skew Surface', value = 'Skew Surface', children=[
-
+            html.Div([
+                html.Label(['Date']),
+                dcc.Slider(list(slider_marks.keys())[0], list(slider_marks.keys())[-1],
+                    step=None,
+                    marks=slider_marks,
+                    value=list(slider_marks.keys())[-1],
+                    id='slider',
+                    included=False
+                )
+            ],
+            className="date-slider",),
+            html.Div(
+                [
+                    html.Button(
+                        "CALL",
+                        id="call-3",
+                        style={"display": "inline-block"},
+                        n_clicks=0,
+                    ),
+                    html.Button(
+                        "PUT",
+                        id="put-3",
+                        style={"display": "inline-block", "marginLeft": "10px"},
+                        n_clicks=0,
+                    ),
+                    dcc.Store(id='intermediate-value-3'),
+                ],
+                className="page-buttons",
+            ),
         ]),
     ])
 ])
@@ -175,9 +211,9 @@ app.layout = html.Div(
         ),
         html.Div(
             [
-                html.Div([dcc.Markdown(id="text")], className="text-box"),
+                # html.Div([dcc.Markdown(id="text")], className="text-box"),
                 dcc.Graph(id="graph",
-                style={"margin": "0px 20px", "height": "45vh"}
+                style={"margin": "4% 4%", "height": "90%", "width": "90%"}
                 ),
             ],
             id="page",
@@ -269,8 +305,31 @@ def get_last_button_2(btn_call, btn_put):
     return {'call_put': call_put, 'call_put_label': call_put_label}
 
 
+# TAB 3 FUNCTIONS
 
-# Make graph
+@app.callback(
+    Output("intermediate-value-3", "data"),
+    Input("call-3", "n_clicks"),
+    Input("put-3", "n_clicks")
+)
+def get_last_button_3(btn_call, btn_put):
+    changed_id = [p['prop_id'] for p in callback_context.triggered][0]
+
+    if 'call' in changed_id:
+        call_put = 'C'
+        call_put_label = 'Call'
+    elif 'put' in changed_id:
+        call_put = 'P'
+        call_put_label = 'Put'
+    else:
+        call_put = 'C'
+        call_put_label = 'Call'
+
+    return {'call_put': call_put, 'call_put_label': call_put_label}
+
+
+
+# GRAPH
 @app.callback(
     Output("graph", "figure"),
     Input('tabs', 'value'),
@@ -279,9 +338,11 @@ def get_last_button_2(btn_call, btn_put):
     Input("intermediate-value", "data"),
     Input("exp-date-dropdown-2", "value"),
     State("date-dropdown-2", "value"),
-    Input("intermediate-value-2", "data")
+    Input("intermediate-value-2", "data"),
+    Input('slider', 'value'),
+    Input("intermediate-value-3", "data")
 )
-def make_graph(tab, exp_date, date, data, exp_date2, date2, data2):
+def make_graph(tab, exp_date, date, data, exp_date2, date2, data2, date3, data3):
     if tab == 'Skew':
         exp_date_main = exp_date
         date_main = date
@@ -336,6 +397,21 @@ def make_graph(tab, exp_date, date, data, exp_date2, date2, data2):
                 showgrid=False,  # Removes Y-axis grid lines    
             )
         )
+    
+    elif tab == 'Skew Surface':
+        date_main = unixToDatetime(date3)
+        data_main = data3
+
+        call_put = data_main['call_put']
+        call_put_label = data_main['call_put_label']
+
+        layout = go.Layout(
+            title=f"Volatility Skew Surface ({call_put_label}) - {date_main}",
+            autosize=True,
+            # width=1000,
+            # height=1000,
+            margin=dict(l=65, r=50, b=65, t=90)
+        )
 
 
     fig = go.Figure()
@@ -357,26 +433,49 @@ def make_graph(tab, exp_date, date, data, exp_date2, date2, data2):
         df_option.expiration_date = df_option.expiration_date.apply(lambda x: datetime.strptime(x, '%Y-%m-%d'))
         df_option.index = df_option.expiration_date.values
         
-        strikes = df_option[df_option.call_put == call_put][exp_date_main:exp_date_main].loc[:, 'strike'].values
-        imp_probs = df_option[df_option.call_put == call_put][exp_date_main:exp_date_main].loc[:, 'implied_volatility'].values
+        if tab != 'Skew Surface':
+            strikes = df_option[df_option.call_put == call_put][exp_date_main:exp_date_main].loc[:, 'strike'].values
+            imp_probs = df_option[df_option.call_put == call_put][exp_date_main:exp_date_main].loc[:, 'implied_volatility'].values
 
 
-        fig.add_trace(go.Scatter(
-            x=strikes,
-            y=imp_probs,
-            name=date,
-            line=dict(
-                color=COLORS[i_color+2],
-                width=2
-            )
-        ))
+            fig.add_trace(go.Scatter(
+                x=strikes,
+                y=imp_probs,
+                name=date,
+                line=dict(
+                    color=COLORS[i_color+2],
+                    width=2
+                )
+            ))
 
-        i_color += 1
+            i_color += 1
+        
+        else:
+            strikes = df_option[df_option.call_put == call_put].loc[:, 'strike'].values
+            imp_probs = df_option[df_option.call_put == call_put].loc[:, 'implied_volatility'].values
+
+            df_option['today'] = datetime.today()
+            df_option['delta_days'] = (df_option.expiration_date - df_option.today).dt.days
+            delta_days = df_option[df_option.call_put == call_put].loc[:, 'delta_days']
+
+            x = strikes
+            y = delta_days
+            z = imp_probs
+
+            xi = np.linspace(x.min(), x.max(), 100)
+            yi = np.linspace(y.min(), y.max(), 100)
+
+            X,Y = np.meshgrid(xi,yi)
+
+            Z = griddata((x,y),z,(X,Y), method='cubic')
+
+            fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Viridis'))
 
 
     fig.update_layout(layout)
 
-    fig.update_traces(mode="markers+lines")
+    if tab != 'Skew Surface':
+        fig.update_traces(mode="markers+lines")
 
     
 
@@ -390,4 +489,4 @@ def make_graph(tab, exp_date, date, data, exp_date2, date2, data2):
 
 # Run the Dash app
 if __name__ == "__main__":
-    app.run_server(host="0.0.0.0", debug=True, port=8080)
+    app.run_server(host="0.0.0.0", debug=False, port=8080)

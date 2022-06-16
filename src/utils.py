@@ -2,7 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import locale
-from datetime import datetime
+from datetime import datetime, timezone
 import mibian
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -73,4 +73,14 @@ def read_data_dynamodb(table_name, key_name, key_value):
     print(response['Items'])
     df = pd.DataFrame(response['Items'])
     return df
+
+
+def unixTimeMillis(dt):
+    ''' Convert str date to unix timestamp '''
+    return int(datetime.strptime(dt, '%Y-%m-%d').replace(tzinfo=timezone.utc).timestamp())
+
+
+def unixToDatetime(unix):
+    ''' Convert unix timestamp to str date. '''
+    return pd.to_datetime(unix,unit='s').strftime('%Y-%m-%d')
 
