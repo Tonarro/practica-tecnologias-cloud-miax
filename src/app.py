@@ -23,9 +23,11 @@ server = app.server
 # get relative data folder
 PATH = pathlib.Path(__file__).parent
 
-COLORS = ['#332288', '#44AA99', '#999933', '#CC6677', '#AA4499']
+COLORS = ['#999933', '#AA4499', '#44AA99', '#332288', '#CC6677']
 
 count, items = scan_dynamodb('MINI_IBEX_VOL')
+
+items = sorted(items, key=lambda d: d['DATE'])
 
 all_options = {}
 
@@ -178,8 +180,7 @@ app.layout = html.Div(
                     step=None,
                     marks=slider_marks,
                     value=list(slider_marks.keys())[-1],
-                    id='slider',
-                    included=False
+                    id='slider'
                 )
             ],
             className="date-slider",),
@@ -354,10 +355,19 @@ def make_graph(tab, exp_date, date, data, exp_date2, date2, data2, date3, data3)
         layout = go.Layout(
             title=f"Volatility Skew {exp_date_main} ({call_put_label}) - {date_main}",
             plot_bgcolor="#FFF",  # Sets background color to white
+            hovermode="x",
+            hoverdistance=100, # Distance to show hover label of data point
+            spikedistance=1000, # Distance to show spike 
             xaxis=dict(
                 title="Strike",
                 linecolor="#BCCCDC",  # Sets color of X-axis line
-                showgrid=False  # Removes X-axis grid lines
+                showgrid=False,  # Removes X-axis grid lines
+                showspikes=True, # Show spike line for X-axis
+                # Format spike
+                spikethickness=2,
+                spikedash="dot",
+                spikecolor="#999999",
+                spikemode="across",
             ),
             yaxis=dict(
                 title="Implied Volatility",  
@@ -407,6 +417,27 @@ def make_graph(tab, exp_date, date, data, exp_date2, date2, data2, date3, data3)
 
         layout = go.Layout(
             title=f"Volatility Skew Surface ({call_put_label}) - {date_main}",
+            plot_bgcolor="#FFF", # Sets background color to white
+            scene = dict(
+                xaxis = dict(
+                    title="Strike",  
+                    linecolor="#BCCCDC",  # Sets color of X-axis line
+                    showgrid=False,
+                    showbackground=False,
+                    ),
+                yaxis = dict(
+                    title="Time to Maturity (Days)",  
+                    linecolor="#BCCCDC",  # Sets color of Y-axis line
+                    showgrid=False,
+                    showbackground=False,
+                    ),
+                zaxis = dict(
+                    title="Implied Volatility",  
+                    linecolor="#BCCCDC",  # Sets color of Z-axis line
+                    showgrid=False,
+                    showbackground=False,
+                    ),
+            ),
             autosize=True,
             # width=1000,
             # height=1000,
@@ -469,7 +500,7 @@ def make_graph(tab, exp_date, date, data, exp_date2, date2, data2, date3, data3)
 
             Z = griddata((x,y),z,(X,Y), method='cubic')
 
-            fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Viridis'))
+            fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Viridis', ))
 
 
     fig.update_layout(layout)
@@ -477,7 +508,6 @@ def make_graph(tab, exp_date, date, data, exp_date2, date2, data2, date3, data3)
     if tab != 'Skew Surface':
         fig.update_traces(mode="markers+lines")
 
-    
 
     # fig = go.Figure(data=[go.Scatter(x=strikes, y=imp_probs)], layout=layout)
 
