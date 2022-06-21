@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import mibian
 import boto3
 from boto3.dynamodb.conditions import Key
+import os
 
 locale.setlocale(locale.LC_ALL, 'es_ES.UTF-8')
 
@@ -55,7 +56,7 @@ def implied_volatility(df_option, future_price):
 
 
 def scan_dynamodb(table_name):
-    dynamodb = boto3.resource('dynamodb', aws_access_key_id="AKIAY6FUYBZMK6AQQSER", aws_secret_access_key="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", region_name="eu-west-3",)
+    dynamodb = boto3.resource('dynamodb', aws_access_key_id=os.environ['aws_access_key_id'], aws_secret_access_key=os.environ['aws_secret_access_key'], region_name="eu-west-3",)
     table = dynamodb.Table(table_name)
     response = table.scan()
     if response['ResponseMetadata']['HTTPStatusCode'] == 200:
