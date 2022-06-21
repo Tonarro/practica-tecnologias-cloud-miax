@@ -23,7 +23,7 @@ server = app.server
 # get relative data folder
 PATH = pathlib.Path(__file__).parent
 
-COLORS = ['#999933', '#AA4499', '#44AA99', '#332288', '#CC6677']
+COLORS = ['#cde11d', '#5ec962', '#21918c', '#3b528b', '#440154']
 
 count, items = scan_dynamodb('MINI_IBEX_VOL')
 
@@ -36,12 +36,15 @@ for i in items:
 
 first_date = list(all_options.keys())[-1]
 
-MAX_DATES_MULTI_DROPDOWN = 4
+MAX_DATES_MULTI_DROPDOWN = 5
 
-MAX_ROWS_SLIDER = 5
+MAX_ROWS_SLIDER = 10
 
-slider_marks = {unixTimeMillis(i): i for i in list(all_options.keys())[:MAX_ROWS_SLIDER]}
-slider_marks
+date_list_slider = list(all_options.keys())[-MAX_ROWS_SLIDER:]
+
+first_last_dls = [date_list_slider[0], date_list_slider[-1]]
+
+slider_marks = {unixTimeMillis(i): {'label':i} if i in first_last_dls else {'label':i, "style": {"display": "none"}} for i in date_list_slider}
 
 
 app.layout = html.Div(
@@ -132,13 +135,13 @@ app.layout = html.Div(
                             html.Div([
                                 html.Label(['Date']),
                                 dcc.Dropdown(
-                                    options=[{'label': k, 'value': k} for k in all_options.keys()],
+                                    options=[{'label': k, 'value': k} for k in list(all_options.keys())],
                                     value=list(all_options.keys())[-MAX_DATES_MULTI_DROPDOWN:],
                                     multi=True,
                                     clearable=False,
                                     id='date-dropdown-2'
                                     ),
-                                html.Div(id='date-output-container-2')
+                                html.Div(id='warning')
                                 ],
                                 className="date-dropdown-2",
                             ),
@@ -212,7 +215,6 @@ app.layout = html.Div(
         ),
         html.Div(
             [
-                # html.Div([dcc.Markdown(id="text")], className="text-box"),
                 dcc.Graph(id="graph",
                 style={"margin": "4% 4%", "height": "90%", "width": "90%"}
                 ),
@@ -266,6 +268,20 @@ def get_last_button(btn_call, btn_put):
 
 # TAB 2 FUNCTIONS
 
+@app.callback(
+    Output('date-dropdown-2', 'options'),
+    Output('warning', 'children'),
+    Input('date-dropdown-2', 'value'))
+def update_multi_options(selected_index):
+    options = [{'label': k, 'value': k} for k in list(all_options.keys())]
+    input_warning = None
+
+    if len(selected_index) >= MAX_DATES_MULTI_DROPDOWN:
+        input_warning = html.P(id="warning", children=f"Limit of {MAX_DATES_MULTI_DROPDOWN} reached", style={"color": "red"})
+        options = [{"label": option["label"], "value": option["value"], "disabled": True} for option in options]
+
+    return options, input_warning
+
 
 @app.callback(
     Output('exp-date-dropdown-2', 'options'),
@@ -274,7 +290,7 @@ def set_exp_date_options_2(selected_index):
     if type(selected_index) == 'str':
         return [{'label': i, 'value': i} for i in all_options[selected_index]]
     else:
-        aux = pd.Series(list(set([i for country in ['2022-06-14', '2022-06-15'] for i in all_options[country]]))).sort_values().values.tolist()
+        aux = pd.Series(list(set([i for ind in selected_index for i in all_options[ind]]))).sort_values().values.tolist()
         return [{'label': i, 'value': i} for i in aux]
 
 
@@ -468,13 +484,15 @@ def make_graph(tab, exp_date, date, data, exp_date2, date2, data2, date3, data3)
             strikes = df_option[df_option.call_put == call_put][exp_date_main:exp_date_main].loc[:, 'strike'].values
             imp_probs = df_option[df_option.call_put == call_put][exp_date_main:exp_date_main].loc[:, 'implied_volatility'].values
 
+            if tab == 'Skew':
+                i_color = 2
 
             fig.add_trace(go.Scatter(
                 x=strikes,
                 y=imp_probs,
                 name=date,
                 line=dict(
-                    color=COLORS[i_color+2],
+                    color=COLORS[i_color],
                     width=2
                 )
             ))
@@ -500,7 +518,7 @@ def make_graph(tab, exp_date, date, data, exp_date2, date2, data2, date3, data3)
 
             Z = griddata((x,y),z,(X,Y), method='cubic')
 
-            fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Viridis', ))
+            fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Viridis'))
 
 
     fig.update_layout(layout)
@@ -509,12 +527,7 @@ def make_graph(tab, exp_date, date, data, exp_date2, date2, data2, date3, data3)
         fig.update_traces(mode="markers+lines")
 
 
-    # fig = go.Figure(data=[go.Scatter(x=strikes, y=imp_probs)], layout=layout)
-
-    # fig.update_layout(transition_duration=500)
-
     return fig
-
 
 
 # Run the Dash app
