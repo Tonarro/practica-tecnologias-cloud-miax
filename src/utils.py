@@ -11,6 +11,7 @@ import os
 locale.setlocale(locale.LC_ALL, 'es_ES.UTF-8')
 
 
+
 def get_data():
     response = requests.get('https://www.meff.es/esp/Derivados-Financieros/Ficha/FIEM_MiniIbex_35')
 
